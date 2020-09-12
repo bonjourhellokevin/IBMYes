@@ -11,20 +11,28 @@ create_mainfest_file(){
     IBM_MEM_SIZE=256
     fi
     echo "内存大小：${IBM_MEM_SIZE}"
+    read -p "指定UUID(不指定將隨機生成)：" UUID 
+    if [ -z "${UUID}" ];then
     UUID=$(cat /proc/sys/kernel/random/uuid)
-    echo "生成随机UUID：${UUID}"
+    fi
+    echo "UUID：${UUID}"
+    read -p "指定WebSocket路徑(不指定將隨機生成)：" WSPATH
+    if [ -z "${WSPATH}" ];then
     WSPATH=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
-    echo "生成随机WebSocket路径：${WSPATH}"
+    fi
+    echo "WebSocket路径：${WSPATH}"
     
-    cat >  ${SH_PATH}/IBMYes/v2ray-cloudfoundry/manifest.yml  << EOF
+    cat >  ${SH_PATH}/IBM-cloudfoundry-continue/cloudfoundry/manifest.yml  << EOF
     applications:
     - path: .
       name: ${IBM_APP_NAME}
       random-route: true
       memory: ${IBM_MEM_SIZE}M
+      buildpacks:
+      - python_buildpack
 EOF
 
-    cat >  ${SH_PATH}/IBMYes/v2ray-cloudfoundry/v2ray/config.json  << EOF
+    cat >  ${SH_PATH}/IBM-cloudfoundry-continue/cloudfoundry/fullaccesstointernet/config.json  << EOF
     {
         "inbounds": [
             {
@@ -34,14 +42,14 @@ EOF
                     "clients": [
                         {
                             "id": "${UUID}",
-                            "alterId": 4
+                            "alterId": 64
                         }
                     ]
                 },
                 "streamSettings": {
                     "network":"ws",
                     "wsSettings": {
-                        "path": ""
+                        "path": "${WSPATH}"
                     }
                 }
             }
@@ -54,19 +62,19 @@ EOF
         ]
     }
 EOF
+
     echo "配置完成。"
 }
 
 clone_repo(){
     echo "进行初始化。。。"
-	rm -rf IBMYes
-    git clone https://github.com/CCChieh/IBMYes
-    cd IBMYes
+	rm -rf IBM-cloudfoundry-continue
+    git clone https://github.com/rootmelo92118/IBM-cloudfoundry-continue
+    cd IBM-cloudfoundry-continue
     git submodule update --init --recursive
-    cd v2ray-cloudfoundry/v2ray
+    cd cloudfoundry/fullaccesstointernet/
     # Upgrade V2Ray to the latest version
     rm v2ray v2ctl
-    
     # Script from https://github.com/v2fly/fhs-install-v2ray/blob/master/install-release.sh
     # Get V2Ray release version number
     TMP_FILE="$(mktemp)"
@@ -88,27 +96,27 @@ clone_repo(){
     rm latest-v2ray.zip
     
     chmod 0755 ./*
-    cd ${SH_PATH}/IBMYes/v2ray-cloudfoundry
+    cd ${SH_PATH}/IBM-cloudfoundry-continue/cloudfoundry
     echo "初始化完成。"
 }
 
 install(){
     echo "进行安装。。。"
-    cd ${SH_PATH}/IBMYes/v2ray-cloudfoundry
+    cd ${SH_PATH}/IBM-cloudfoundry-continue/cloudfoundry
     ibmcloud target --cf
     echo "N"|ibmcloud cf install
     ibmcloud cf push
     echo "安装完成。"
-    echo "生成的随机 UUID：${UUID}"
-    echo "生成的随机 WebSocket路径：${WSPATH}"
+    echo "UUID：${UUID}"
+    echo "WebSocket路径：${WSPATH}"
     VMESSCODE=$(base64 -w 0 << EOF
     {
       "v": "2",
-      "ps": "ibmyes",
-      "add": "ibmyes.us-south.cf.appdomain.cloud",
+      "ps": "v2ray-WebSocket+TLS IBM United States",
+      "add": "${IBM_APP_NAME}.us-south.cf.appdomain.cloud",
       "port": "443",
       "id": "${UUID}",
-      "aid": "4",
+      "aid": "64",
       "net": "ws",
       "type": "none",
       "host": "",
@@ -122,6 +130,7 @@ EOF
 
 }
 
+ibmcloud login -a "https://cloud.ibm.com" -r "us-south"
 clone_repo
 create_mainfest_file
 install
